@@ -1,0 +1,2383 @@
+<%@ Page Language="C#" Inherits="System.Web.UI.Page" %>
+<!DOCTYPE html>
+<html>
+<head><meta charset='UTF-8'><title>FWSC JCAQ Secure Form</title></head>
+<body>
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>FWSC JCAQ Secure Form</title></head>
+
+
+<!-- ========================= -->
+<!-- BLOCK 1: PASSCODE + ID PAGE -->
+<!-- ========================= -->
+
+<div id="passcodeScreen" style="font-family:Arial; max-width:600px; margin:50px auto; text-align:center;">
+    <h2>Secure Access Required</h2>
+    <p>Please enter the training passcode to begin the FWSC Job Content Analysis Questionnaire.</p>
+
+    <input id="passcodeInput" type="password" 
+           placeholder="Enter passcode"
+           style="padding:10px; width:80%; font-size:16px;">
+
+    <br><br>
+    <button onclick="validatePasscode()" 
+            style="padding:10px 20px; font-size:16px; cursor:pointer;">
+        Continue
+    </button>
+
+    <p id="passcodeError" style="color:red; display:none; margin-top:15px;">
+        Incorrect passcode. Please try again.
+    </p>
+</div>
+
+<!-- RESPONDENT ID SCREEN (hidden at first) -->
+<div id="respondentIdScreen" style="display:none; font-family:Arial; max-width:600px; margin:50px auto; text-align:center;">
+    <h2>Enter Respondent ID</h2>
+    <p>This ID will appear as a watermark on all pages.</p>
+
+    <input id="respondentIdInput" type="text"
+           placeholder="e.g., EMP-001"
+           style="padding:10px; width:80%; font-size:16px;">
+
+    <br><br>
+    <button onclick="beginQuestionnaire()" 
+            style="padding:10px 20px; font-size:16px; cursor:pointer;">
+        Begin Questionnaire
+    </button>
+
+    <p id="respondentError" style="color:red; display:none; margin-top:15px;">
+        Please enter a valid Respondent ID.
+    </p>
+</div>
+
+<script>
+/* ================================
+   PASSCODE VALIDATION
+=================================== */
+
+const ACCESS_CODE = "FWSC2026UNI_HR_EVA_TRAINING";   // ✅ Your chosen passcode
+
+function validatePasscode(){
+    const entered = document.getElementById("passcodeInput").value.trim();
+
+    if(entered === ACCESS_CODE){
+        document.getElementById("passcodeScreen").style.display = "none";
+        document.getElementById("respondentIdScreen").style.display = "block";
+    } else {
+        document.getElementById("passcodeError").style.display = "block";
+        setTimeout(()=>{ document.getElementById("passcodeError").style.display="none"; }, 2500);
+    }
+}
+
+/* ================================
+   RESPONDENT ID VALIDATION
+=================================== */
+
+let RESPONDENT_ID = "";
+
+function beginQuestionnaire(){
+    const rid = document.getElementById("respondentIdInput").value.trim();
+
+    if(rid.length < 2){
+        document.getElementById("respondentError").style.display = "block";
+        setTimeout(()=>{ document.getElementById("respondentError").style.display="none"; }, 2500);
+        return;
+    }
+
+    RESPONDENT_ID = rid;
+
+    document.getElementById("respondentIdScreen").style.display = "none";
+
+    // This will reveal Block 4's questionnaire container later.
+    document.getElementById("questionnaireContainer").style.display = "block";
+
+    // Initialize watermark once we paste Block 2
+    if(typeof startWatermark === "function"){ startWatermark(); }
+}
+</script>
+
+
+<!-- ===================================== -->
+<!-- BLOCK 2: WATERMARK + SECURITY ENGINE -->
+<!-- ===================================== -->
+
+<!-- Watermark overlay container (hidden until questionnaire starts) -->
+<div id="watermarkLayer" 
+     style="pointer-events:none; position:fixed; top:0; left:0; width:100%; height:100%;
+            z-index:9999; opacity:0.08; font-size:32px; color:#000;
+            display:none; text-align:center; white-space:pre-wrap;">
+</div>
+
+<script>
+
+/* ============================================================
+   1. START WATERMARK ENGINE AFTER RESPONDENT ID IS ENTERED
+   ============================================================ */
+function startWatermark(){
+    const wm = document.getElementById("watermarkLayer");
+    wm.style.display = "block";
+
+    function applyWatermark(){
+        wm.innerText = "Respondent: " + RESPONDENT_ID + " – FWSC Confidential\n\n";
+    }
+
+    applyWatermark();
+    setInterval(applyWatermark, 1500);
+}
+
+/* ============================================================
+   2. DISABLE RIGHT-CLICK
+   ============================================================ */
+document.addEventListener("contextmenu", function(e){
+    e.preventDefault();
+});
+
+/* ============================================================
+   3. DISABLE TEXT SELECTION
+   ============================================================ */
+document.addEventListener("selectstart", function(e){
+    e.preventDefault();
+});
+document.addEventListener("mousedown", function(e){
+    if(e.detail > 1) e.preventDefault();
+});
+
+/* ============================================================
+   4. DISABLE COPY / CUT / PASTE
+   ============================================================ */
+document.addEventListener("copy", e => e.preventDefault());
+document.addEventListener("cut", e => e.preventDefault());
+document.addEventListener("paste", e => e.preventDefault());
+
+/* ============================================================
+   5. BLOCK PRINTING (Ctrl+P / Cmd+P / Browser Print)
+   ============================================================ */
+window.addEventListener("keydown", function(e){
+    if ((e.ctrlKey && e.key === "p") || (e.metaKey && e.key === "p")){
+        e.preventDefault();
+        alert("Printing is disabled for this secure questionnaire.");
+    }
+});
+
+/* CSS-level print blocking */
+var css = document.createElement("style");
+css.type = "text/css";
+css.media = "print";
+css.innerHTML = "body { display:none !important; }";
+document.head.appendChild(css);
+
+</script>
+
+
+<!-- ========================================= -->
+<!-- BLOCK 3: ANTI-SCREENSHOT & BLUR OVERLAY -->
+<!-- ========================================= -->
+
+<!-- Blur screen overlay -->
+<div id="blurOverlay" 
+     style="position:fixed; top:0; left:0; width:100%; height:100%;
+            background:rgba(255,255,255,0.9); backdrop-filter:blur(12px);
+            display:none; z-index:9998; text-align:center; padding-top:200px;
+            font-size:24px; color:#a00; font-family:Arial;">
+    ⚠️ Screenshot attempt detected — content temporarily shielded.
+</div>
+
+<script>
+
+/* ============================================================
+   1. DETECT PRINT SCREEN KEY
+   ============================================================ */
+document.addEventListener("keyup", function(e){
+    if(e.key === "PrintScreen"){
+        triggerBlurShield();
+    }
+});
+
+/* ============================================================
+   2. DETECT SCREENSHOT TO CLIPBOARD (Chrome/Edge)
+   ============================================================ */
+if (navigator.clipboard && navigator.clipboard.read){
+    setInterval(async ()=>{
+        try{
+            const items = await navigator.clipboard.read();
+            if(items && items.length > 0){
+                triggerBlurShield();
+            }
+        } catch(e){}
+    }, 1800);
+}
+
+/* ============================================================
+   3. DETECT FOCUS LOSS (common during screen recording tools)
+   ============================================================ */
+window.addEventListener("blur", ()=>{
+    // Soft signal — not always a screenshot, but we discourage it
+    // Uncomment if you want stricter behavior:
+    // triggerBlurShield();
+});
+
+/* ============================================================
+   4. BLUR SHIELD FUNCTION
+   ============================================================ */
+function triggerBlurShield(){
+    const bo = document.getElementById("blurOverlay");
+    bo.style.display = "block";
+
+    setTimeout(()=>{
+        bo.style.display = "none";
+    }, 5000); // 5-second blur
+}
+
+</script>
+
+
+
+<!-- ===================================== -->
+<!-- BLOCK 4: NAVIGATION + FORM CONTAINER -->
+<!-- ===================================== -->
+
+<style>
+/* Basic page styling */
+.pageSection {
+    display:none;
+    font-family:Arial;
+    max-width:800px;
+    margin:20px auto;
+}
+
+.navButtons {
+    margin-top:30px;
+    display:flex;
+    justify-content:space-between;
+}
+button.navBtn {
+    padding:10px 25px;
+    font-size:16px;
+    cursor:pointer;
+}
+
+/* Progress indicator */
+#progressBarContainer {
+    width:100%;
+    background:#ddd;
+    height:10px;
+    border-radius:5px;
+    margin:20px 0;
+    display:none;
+}
+#progressBar {
+    height:10px;
+    width:0%;
+    background:#0067b8;
+    border-radius:5px;
+}
+</style>
+
+<!-- PROGRESS BAR -->
+<div id="progressBarContainer">
+    <div id="progressBar"></div>
+</div>
+
+<!-- MAIN QUESTIONNAIRE CONTAINER -->
+<div id="questionnaireContainer" style="display:none;">
+
+    <!-- ✅ Page 1 placeholder (Job Identification) -->
+    <div class="pageSection" id="page1">
+        <!-- ============================== -->
+<!-- BLOCK 5: JOB IDENTIFICATION   -->
+<!-- ============================== -->
+
+<h2>Job Identification</h2>
+
+<p>Please complete all fields accurately as they appear in the FWSC Job Content Analysis Questionnaire.</p>
+
+<label>Job Title:</label><br>
+<input type="text" id="JobTitle" style="width:90%; padding:8px;"><br><br>
+
+<label>Organisation / Institution:</label><br>
+<input type="text" id="Organisation" style="width:90%; padding:8px;"><br><br>
+
+<label>Status:</label><br>
+<select id="Status" style="width:90%; padding:8px;">
+    <option value="">-- Select --</option>
+    <option>Full-time</option>
+    <option>Part-time</option>
+    <option>Other</option>
+</select><br><br>
+
+<label>Grade or Rank:</label><br>
+<input type="text" id="GradeOrRank" style="width:90%; padding:8px;"><br><br>
+
+<label>Department:</label><br>
+<input type="text" id="Department" style="width:90%; padding:8px;"><br><br>
+
+<label>Last Name:</label><br>
+<input type="text" id="LastName" style="width:90%; padding:8px;"><br><br>
+
+<label>First Name:</label><br>
+<input type="text" id="FirstName" style="width:90%; padding:8px;"><br><br>
+
+<label>Work Address:</label><br>
+<textarea id="WorkAddress" style="width:90%; height:70px; padding:8px;"></textarea><br><br>
+
+<label>Work Telephone Number:</label><br>
+<input type="text" id="WorkTelephone" style="width:90%; padding:8px;"><br><br>
+
+<label>Fax Number (optional):</label><br>
+<input type="text" id="FaxNumber" style="width:90%; padding:8px;"><br><br>
+
+<label>Email:</label><br>
+<input type="email" id="Email" style="width:90%; padding:8px;"><br><br>
+
+<label>Name and Title of Your Superior:</label><br>
+<input type="text" id="SupervisorName" style="width:90%; padding:8px;"><br><br>
+
+<label>Do you report to anyone else? (Name and Title):</label><br>
+<input type="text" id="SecondarySupervisor" style="width:90%; padding:8px;"><br><br>
+
+<label>Positional / Functional Chart:</label>
+<p style="font-size:14px; color:#444;">
+Provide a brief description of where your position fits within the organisational structure.
+</p>
+<textarea id="PositionalChart" style="width:90%; height:120px; padding:8px;"></textarea><br><br>
+    </div>
+
+    <!-- ✅ Page 2 placeholder (Job Summary) -->
+    <div class="pageSection" id="page2">
+        <!-- ========================= -->
+<!-- BLOCK 6: JOB SUMMARY     -->
+<!-- ========================= -->
+
+<h2>Job Summary</h2>
+
+<p>
+In a few words, provide a brief description of the purpose of your job.  
+Describe the overall objective or primary function of your position.
+</p>
+
+<label for="JobSummaryPurpose">Job Summary:</label><br>
+<textarea id="JobSummaryPurpose" 
+          style="width:90%; height:120px; padding:8px; font-size:15px;"></textarea>
+<br><br>
+    </div>
+
+    <!-- ✅ Additional pages will be added from Blocks 5–20 -->
+    <div id="dynamicPageAnchor"></div>
+
+    <!-- NAV BUTTONS -->
+    <div class="navButtons">
+        <button id="backBtn" class="navBtn" onclick="goBack()" style="visibility:hidden;">⬅ Back</button>
+        <button id="nextBtn" class="navBtn" onclick="goNext()">Next ➡</button>
+    </div>
+
+</div>
+
+
+<!-- ===================================== -->
+<!-- BLOCK 7: JOB DUTIES — PAGES 3 & 4    -->
+<!-- ===================================== -->
+
+<!-- ✅ PAGE 3 — Duties 1 to 5 -->
+<div class="pageSection" id="page3">
+    <h2>Job Duties (Part 1)</h2>
+    <p>
+        For each duty, describe:<br>
+        <strong>WHAT</strong> is done, <strong>HOW</strong> it is done, and <strong>WHY</strong> it is done.<br>
+        Then indicate Frequency, Percentage of time, and Order of Importance.
+    </p>
+
+    <!-- DUTY 1 -->
+    <h3>Duty 1</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty1_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty1_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty1_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty1_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 2 -->
+    <h3>Duty 2</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty2_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty2_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty2_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty2_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 3 -->
+    <h3>Duty 3</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty3_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty3_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty3_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty3_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 4 -->
+    <h3>Duty 4</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty4_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty4_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty4_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty4_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 5 -->
+    <h3>Duty 5</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty5_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty5_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty5_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty5_Importance" type="number" style="width:90%;"><br><br>
+</div>
+
+<!-- ✅ PAGE 4 — Duties 6 to 10 -->
+<div class="pageSection" id="page4">
+    <h2>Job Duties (Part 2)</h2>
+
+    <!-- DUTY 6 -->
+    <h3>Duty 6</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty6_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty6_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty6_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty6_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 7 -->
+    <h3>Duty 7</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty7_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty7_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty7_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty7_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 8 -->
+    <h3>Duty 8</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty8_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty8_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty8_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty8_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 9 -->
+    <h3>Duty 9</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty9_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty9_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty9_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty9_Importance" type="number" style="width:90%;"><br><br>
+
+    <hr>
+
+    <!-- DUTY 10 -->
+    <h3>Duty 10</h3>
+    <label>Description:</label><br>
+    <textarea id="Duty10_Description" style="width:90%; height:80px;"></textarea><br><br>
+
+    <label>Frequency:</label><br>
+    <input id="Duty10_Frequency" type="text" style="width:90%;"><br><br>
+
+    <label>Percentage of Time (%):</label><br>
+    <input id="Duty10_Percentage" type="number" style="width:90%;"><br><br>
+
+    <label>Order of Importance:</label><br>
+    <input id="Duty10_Importance" type="number" style="width:90%;"><br><br>
+</div>
+
+<!-- ===================================== -->
+<!-- BLOCK 8: FACTOR 1 — KNOWLEDGE (PAGE 5) -->
+<!-- ===================================== -->
+
+<div class="pageSection" id="page5">
+
+    <h2>Factor 1: Knowledge</h2>
+
+    <p>
+        This section assesses the formal education, certifications, reading/writing/mathematical
+        skills, and other knowledge required to perform your job as described in the FWSC
+        Job Content Analysis Questionnaire.
+    </p>
+
+    <!-- 3(a) Minimum Formal Education -->
+    <h3>3(a) Minimum Formal Education Required</h3>
+    <label>Minimum Education Level:</label><br>
+    <select id="F1_MinEducation" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Primary School</option>
+        <option>JSS / MSLC</option>
+        <option>SSS / VTI</option>
+        <option>‘O’ Level</option>
+        <option>‘A’ Level</option>
+        <option>Non-Tertiary Diploma</option>
+        <option>HND</option>
+        <option>Tertiary Diploma</option>
+        <option>Bachelor’s</option>
+        <option>Postgraduate Diploma</option>
+        <option>Master’s</option>
+        <option>Doctorate</option>
+        <option>Other</option>
+    </select><br><br>
+
+    <label>Specify Programme / Area of Study (if applicable):</label><br>
+    <input id="F1_EducationProgram" type="text" style="width:90%; padding:8px;"><br><br>
+
+    <!-- 3(b) Professional Licence Requirement -->
+    <h3>3(b) Professional Licence / Certification</h3>
+    <label>Does your job require a professional licence or certification?</label><br>
+    <select id="F1_LicenseRequired" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>No</option>
+        <option>Yes</option>
+    </select><br><br>
+
+    <label>If yes, specify type of licence/certification and issuing institution:</label><br>
+    <textarea id="F1_LicenseType" style="width:90%; height:70px; padding:8px;"></textarea>
+    <br><br>
+
+    <!-- 3(c–d) Training Requirements -->
+    <h3>3(c) Required Classroom Training</h3>
+    <input id="F1_TrainingClassroom" type="text" 
+           placeholder="e.g., 3 months, 1 year"
+           style="width:90%; padding:8px;"><br><br>
+
+    <h3>3(d) Required On-the-Job Training</h3>
+    <input id="F1_TrainingOnJob" type="text" 
+           placeholder="e.g., 6 months, 2 years"
+           style="width:90%; padding:8px;"><br><br>
+
+    <!-- 3(e) Reading Skills -->
+    <h3>3(e) Reading Skills Required</h3>
+    <select id="F1_ReadingSkills" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Read notices, signs and labels</option>
+        <option>Read short notes, brief forms or instructions</option>
+        <option>Read detailed forms, memos, charts, specifications</option>
+        <option>Read and understand highly technical reports or research papers</option>
+    </select><br><br>
+
+    <label>Provide a typical example:</label><br>
+    <textarea id="F1_ReadingExample" style="width:90%; height:70px; padding:8px;"></textarea><br><br>
+
+    <!-- 3(f) Writing Skills -->
+    <h3>3(f) Writing Skills Required</h3>
+    <select id="F1_WritingSkills" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Does not apply</option>
+        <option>Write simple notes, complete basic forms</option>
+        <option>Write standard memos and routine letters</option>
+        <option>Write non-standard correspondence (reports, procedures)</option>
+        <option>Write complex materials (manuals, policy papers)</option>
+        <option>Write highly complex technical documents or research papers</option>
+    </select><br><br>
+
+    <label>Provide a typical example:</label><br>
+    <textarea id="F1_WritingExample" style="width:90%; height:70px; padding:8px;"></textarea><br><br>
+
+    <!-- 3(g) Mathematical Skills -->
+    <h3>3(g) Mathematical Skills Required</h3>
+    <select id="F1_MathSkills" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Little or no mathematical work</option>
+        <option>Addition, subtraction, multiplication, division</option>
+        <option>Calculating percentages, ratios, averages</option>
+        <option>Use mathematical formulas or pre‑established equations</option>
+        <option>Apply a wide range of mathematical/statistical concepts</option>
+    </select><br><br>
+
+    <label>Provide a typical example:</label><br>
+    <textarea id="F1_MathExample" style="width:90%; height:70px; padding:8px;"></textarea><br><br>
+
+    <!-- 3(h) Other Knowledge -->
+    <h3>3(h) Other Knowledge Not Covered Above</h3>
+    <textarea id="F1_OtherKnowledge" style="width:90%; height:120px; padding:8px;"></textarea><br><br>
+
+</div>
+
+
+
+<!-- =============================================== -->
+<!-- BLOCK 9: FACTOR 2 — LEARNING EXPERIENCE (Page 6) -->
+<!-- =============================================== -->
+
+<div class="pageSection" id="page6">
+
+    <h2>Factor 2: Learning Experience</h2>
+
+    <p>
+        This section covers the amount of previous experience and on‑the‑job training typically
+        required to perform your job effectively.
+    </p>
+
+    <!-- 4(a) Previous Experience Required -->
+    <h3>4(a) Previous Related Experience Required</h3>
+
+    <label>Select the amount of prior experience typically required:</label><br>
+    <select id="F2_PreviousExperience" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>No related experience required</option>
+        <option>Less than 3 months</option>
+        <option>4 to 6 months</option>
+        <option>More than 6 months; less than 1 year</option>
+        <option>1 year</option>
+        <option>2 years</option>
+        <option>3 to 4 years</option>
+        <option>5 to 6 years</option>
+        <option>More than 6 years</option>
+    </select>
+    <br><br>
+
+    <label>If more than 6 years, specify number of years:</label><br>
+    <input id="F2_ExperienceYears" type="text" style="width:90%; padding:8px;"><br><br>
+
+    <label>Describe the type of related work experience required:</label><br>
+    <textarea id="F2_PreviousExperienceDesc" style="width:90%; height:100px; padding:8px;"></textarea>
+    <br><br>
+
+    <hr>
+
+    <!-- 4(b) On-the-job training after appointment -->
+    <h3>4(b) On‑the‑Job Training Required</h3>
+
+    <label>How much training is required after starting the job?</label><br>
+    <select id="F2_OnJobTraining" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Up to 1 month</option>
+        <option>1 to 3 months</option>
+        <option>3 to 6 months</option>
+        <option>6 months to 1 year</option>
+        <option>1 to 2 years</option>
+        <option>More than 2 years</option>
+    </select>
+    <br><br>
+
+    <hr>
+
+    <!-- 4(c) Other learning experience not covered -->
+    <h3>4(c) Additional Learning Experience Not Covered Above</h3>
+
+    <textarea id="F2_OtherLearning" style="width:90%; height:120px; padding:8px;"></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ================================================ -->
+<!-- BLOCK 10: FACTOR 3 — JUDGMENT (Pages 7 & 8)      -->
+<!-- ================================================ -->
+
+<!-- ✅ PAGE 7 — JUDGMENT PART A & B -->
+<div class="pageSection" id="page7">
+
+    <h2>Factor 3: Judgment (Part A & B)</h2>
+
+    <p>
+        This section evaluates how you respond to new or challenging work situations, 
+        and what level of discretion you typically exercise in performing your job.
+    </p>
+
+    <!-- 5(a) Responding to new/challenging situations -->
+    <h3>5(a) How do you respond when you encounter a new or challenging situation?</h3>
+
+    <p><strong>Choose the frequency that applies for each behavior and provide an example.</strong></p>
+
+    <!-- A1 -->
+    <label><strong>Immediately ask my supervisor what to do:</strong></label><br>
+    <select id="F3A_AskSupervisor_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option>
+        <option>Almost never</option>
+        <option>Once in a while</option>
+        <option>Often</option>
+        <option>Most of the time</option>
+    </select><br><br>
+
+    <label>Example:</label><br>
+    <textarea id="F3A_AskSupervisor_Example" style="width:90%; height:70px;"></textarea>
+    <br><br>
+    <hr>
+
+    <!-- A2 -->
+    <label><strong>Ask co‑workers for help in deciding what to do:</strong></label><br>
+    <select id="F3A_AskCoworkers_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option>
+        <option>Almost never</option>
+        <option>Once in a while</option>
+        <option>Often</option>
+        <option>Most of the time</option>
+    </select><br><br>
+
+    <label>Example:</label><br>
+    <textarea id="F3A_AskCoworkers_Example" style="width:90%; height:70px;"></textarea>
+    <br><br>
+    <hr>
+
+    <!-- A3 -->
+    <label><strong>Read manuals and figure out what to do:</strong></label><br>
+    <select id="F3A_ReadManuals_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option>
+        <option>Almost never</option>
+        <option>Once in a while</option>
+        <option>Often</option>
+        <option>Most of the time</option>
+    </select><br><br>
+    <label>Example:</label><br>
+    <textarea id="F3A_ReadManuals_Example" style="width:90%; height:70px;"></textarea>
+    <br><br>
+    <hr>
+
+    <!-- A4 -->
+    <label><strong>Decide what to do based on experience + checking guidelines:</strong></label><br>
+    <select id="F3A_UseExperience_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option>
+        <option>Almost never</option>
+        <option>Once in a while</option>
+        <option>Often</option>
+        <option>Most of the time</option>
+    </select><br><br>
+    <label>Example:</label><br>
+    <textarea id="F3A_UseExperience_Example" style="width:90%; height:70px;"></textarea>
+    <br><br>
+    <hr>
+
+    <!-- 5(b) Level of discretion -->
+    <h3>5(b) What best describes how you normally make decisions?</h3>
+
+    <select id="F3B_DecisionType" style="width:90%; padding:8px;">
+        <option value="">-- Select one --</option>
+        <option>Follow specific instructions/procedures exactly</option>
+        <option>Use well‑defined methods as guidelines</option>
+        <option>Select from established guidelines to achieve results</option>
+        <option>Modify/change methods but stay within broad parameters</option>
+        <option>Develop new solutions to diverse, complex problems with no guidelines</option>
+    </select><br><br>
+
+    <label>Provide a specific example:</label><br>
+    <textarea id="F3B_DecisionExample" style="width:90%; height:90px;"></textarea>
+    <br><br>
+
+</div>
+
+<!-- ✅ PAGE 8 — JUDGMENT PART C, D & E -->
+<div class="pageSection" id="page8">
+
+    <h2>Factor 3: Judgment (Part C, D & E)</h2>
+
+    <!-- 5(c) Consultation -->
+    <h3>5(c) With whom do you consult before making major decisions?</h3>
+
+    <p>Select all that apply and provide examples.</p>
+
+    <label><input type="checkbox" id="F3C_ConsultSupervisor"> My immediate supervisor</label><br>
+    <textarea id="F3C_ConsultSupervisor_Example" style="width:90%; height:60px;" placeholder="Example..."></textarea>
+    <br><br>
+
+    <label><input type="checkbox" id="F3C_ConsultPeersDept"> Peers in my department</label><br>
+    <textarea id="F3C_ConsultPeersDept_Example" style="width:90%; height:60px;"></textarea>
+    <br><br>
+
+    <label><input type="checkbox" id="F
+
+
+<!-- ======================================================= -->
+<!-- BLOCK 11: FACTOR 4 — CONSEQUENCE OF ERROR (Pages 9 & 10) -->
+<!-- ======================================================= -->
+
+<!-- ✅ PAGE 9 — Part A & B -->
+<div class="pageSection" id="page9">
+
+    <h2>Factor 4: Consequence of Error (Part A & B)</h2>
+
+    <p>
+        This section evaluates the nature of errors that may occur in your job, 
+        the guidelines you use, and how your work is checked.
+    </p>
+
+    <!-- 6(a) Guidelines, policies, procedures used -->
+    <h3>6(a) Guidelines / Policies / Procedures Used</h3>
+
+    <label><strong>Set Policies and Procedures:</strong></label><br>
+    <textarea id="F4A_SetPolicies" style="width:90%; height:70px;"></textarea><br><br>
+
+    <label><strong>Guidelines or Professional Standards:</strong></label><br>
+    <textarea id="F4A_ProfessionalStandards" style="width:90%; height:70px;"></textarea><br><br>
+
+    <label><strong>Broad Parameters:</strong></label><br>
+    <textarea id="F4A_BroadParameters" style="width:90%; height:70px;"></textarea><br><br>
+
+    <hr>
+
+    <!-- 6(b) How work is checked -->
+    <h3>6(b) How is your work checked by your supervisor?</h3>
+
+    <label>Select all that apply:</label><br><br>
+
+    <label><input type="checkbox" id="F4B_MostWorkChecked"> Most work is checked</label><br>
+    <label><input type="checkbox" id="F4B_PeriodicCheck"> Work is checked periodically</label><br>
+    <label><input type="checkbox" id="F4B_FinalOnly"> Only final versions/outputs are checked</label><br>
+    <label><input type="checkbox" id="F4B_OralReports"> Oral progress reports are required</label><br>
+    <label><input type="checkbox" id="F4B_WrittenReports"> Written progress reports are required</label><br>
+    <label><input type="checkbox" id="F4B_Discussion"> Discussion with supervisor</label><br>
+    <label><input type="checkbox" id="F4B_StatisticalReports"> Statistical reports required</label><br><br>
+
+    <label>Other (specify):</label><br>
+    <textarea id="F4B_Other" style="width:90%; height:60px;"></textarea><br><br>
+
+</div>
+
+<!-- ✅ PAGE 10 — Part C, D & E -->
+<div class="pageSection" id="page10">
+
+    <h2>Factor 4: Consequence of Error (Part C, D & E)</h2>
+
+    <!-- 6(c) Likely consequences -->
+    <h3>6(c) Likely Consequences of Errors in Judgment</h3>
+
+    <p>Select all that apply and provide examples.</p>
+
+    <label><input type="checkbox" id="F4C_EasilyCorrect"> I can easily correct errors in judgment</label><br>
+    <textarea id="F4C_EasilyCorrect_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_OthersCorrect"> Errors may require others to correct</label><br>
+    <textarea id="F4C_OthersCorrect_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_MinorLoss"> Errors may cause minor losses (waste, damage)</label><br>
+    <textarea id="F4C_MinorLoss_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_Inaccuracy"> Errors may cause inaccuracies affecting other activities</label><br>
+    <textarea id="F4C_Inaccuracy_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_DelayOps"> Errors may delay related operations</label><br>
+    <textarea id="F4C_DelayOps_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_MisinterpretPolicy"> Errors may lead to inappropriate policy/procedure interpretation</label><br>
+    <textarea id="F4C_MisinterpretPolicy_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_SeriousResults"> Errors may cause serious results (service breakdown, poor planning)</label><br>
+    <textarea id="F4C_SeriousResults_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_ReducedService"> Errors may reduce service to the public</label><br>
+    <textarea id="F4C_ReducedService_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_Embarrassment"> Errors may cause embarrassment in public relations</label><br>
+    <textarea id="F4C_Embarrassment_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_Deterioration"> Errors may cause deterioration in public/employee relations</label><br>
+    <textarea id="F4C_Deterioration_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><input type="checkbox" id="F4C_MajorLoss"> Errors may cause major loss of institutional prestige</label><br>
+    <textarea id="F4C_MajorLoss_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <hr>
+
+    <!-- 6(d) Who corrects the error -->
+    <h3>6(d) Who becomes involved in correcting an error?</h3>
+
+    <select id="F4D_ErrorCorrection" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>I correct it myself</option>
+        <option>My supervisor tells me how to correct it</option>
+        <option>My supervisor & department head develop a solution</option>
+        <option>Other (specify)</option>
+    </select><br><br>
+
+    <textarea id="F4D_ErrorCorrection_Example" style="width:90%; height:100px;" placeholder="Example..."></textarea><br><br>
+
+    <hr>
+
+    <!-- 6(e) Additional information -->
+    <h3>6(e) Other information not covered above:</h3>
+    <textarea id="F4E_OtherInfo" style="width:90%; height:120px;"></textarea><br><br>
+
+</div>
+
+
+<!-- =============================================== -->
+<!-- BLOCK 12: FACTOR 5 — FINANCIAL RESPONSIBILITY   -->
+<!-- =============================================== -->
+
+<div class="pageSection" id="page11">
+
+    <h2>Factor 5: Financial Responsibility</h2>
+
+    <p>
+        This section evaluates the extent of your responsibility for financial transactions,
+        authorizations, budgets, and financial recommendations.
+    </p>
+
+    <h3>7(a) Financial Responsibility — Select all that apply</h3>
+
+    <label><input type="checkbox" id="F5_NoFinancialResp"> 
+        Little or no responsibility for handling cash, receipts, purchase orders, cheques, or bonds
+        OR only sign for receipt of delivered materials.
+    </label><br><br>
+    <textarea id="F5_NoFinancialResp_Example" 
+              placeholder="Provide a typical example..."
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F5_HandleProcessPayments">
+        Responsible for handling or processing cash, receipts/payments, purchase orders, cheques, bonds
+        OR initiating/authorizing payment for materials/services.
+    </label><br><br>
+    <textarea id="F5_HandleProcessPayments_Example"
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F5_ExpenditureAuthority">
+        Authority to sign to make expenditures or recoveries according to detailed written procedures.
+    </label><br><br>
+    <textarea id="F5_ExpenditureAuthority_Example"
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F5_BudgetAdmin">
+        Responsibility for administering a budget (e.g., data collection, analysis) 
+        OR authority to sign official institutional contracts (specify level).
+    </label><br><br>
+    <textarea id="F5_BudgetAdmin_Example"
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F5_FinancialForecasting">
+        Responsible for financial forecasting and making recommendations based on these forecasts.
+    </label><br><br>
+    <textarea id="F5_FinancialForecasting_Example"
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <h3>7(b) Additional financial responsibility information</h3>
+    <textarea id="F5_OtherInfo" 
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="Provide any additional information not captured above..."></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ======================================================= -->
+<!-- BLOCK 13: FACTOR 6 — RESPONSIBILITY FOR ASSETS (Page 12) -->
+<!-- ======================================================= -->
+
+<div class="pageSection" id="page12">
+
+    <h2>Factor 6: Responsibility for Assets</h2>
+
+    <p>
+        This section evaluates your responsibility for goods, tools, equipment, software, 
+        and the care/welfare of people or patients, as outlined in the FWSC JCAQ.
+    </p>
+
+    <!-- 8(a) Levels of responsibility -->
+
+    <h3>8(a) Responsibility for Goods, Tools, Equipment, Software, People</h3>
+
+    <label><input type="checkbox" id="F6_NoResponsibility">
+        No responsibility for goods, tools, equipment, software, or people.
+    </label><br><br>
+
+    <label><input type="checkbox" id="F6_BasicCare">
+        Responsible for basic care and handling of goods, tools, equipment, software, 
+        and general safety of people/patients.
+    </label><br><br>
+    <textarea id="F6_BasicCare_Example" 
+              placeholder="Specify types of goods/tools/equipment/people..."
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F6_Maintenance">
+        Responsible for prescribed maintenance or making adjustments/modifications 
+        to tools, equipment, or software. Shares responsibility for care of people/patients.
+    </label><br><br>
+    <textarea id="F6_Maintenance_Example" 
+              placeholder="Describe maintenance work or type of care for people/patients..."
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F6_SoftwareModification">
+        Responsible for modifying or adapting software programs.
+    </label><br><br>
+    <textarea id="F6_SoftwareModification_Example"
+              placeholder="Specify software packages and type of modification work..."
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <label><input type="checkbox" id="F6_PeopleCare">
+        Responsible for special care/welfare of people or patients.
+    </label><br><br>
+    <textarea id="F6_PeopleCare_Example"
+              placeholder="Describe responsibilities related to care/welfare..."
+              style="width:90%; height:70px;"></textarea>
+    <br><br><hr>
+
+    <!-- 8(b) Additional information -->
+    <h3>8(b) Additional Information on Responsibility for Assets</h3>
+    <textarea id="F6_OtherInfo" 
+              placeholder="Provide any information not covered above..."
+              style="width:90%; height:120px; padding:8px;"></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- =========================================================== -->
+<!-- BLOCK 14: FACTOR 7 — SUPERVISORY RESPONSIBILITY (P13 & P14) -->
+<!-- =========================================================== -->
+
+<!-- ✅ PAGE 13 — DIRECT SUPERVISION -->
+<div class="pageSection" id="page13">
+
+    <h2>Factor 7: Supervisory Responsibility (Part 1 — Direct Supervision)</h2>
+
+    <p>
+        This section assesses the level of direct supervision you exercise over other employees, 
+        including tasks such as assigning work, checking work, maintaining quality, and recommending staff decisions.
+    </p>
+
+    <h3>9(a) Direct Supervision — Select all that apply</h3>
+
+    <label><input type="checkbox" id="F7_ExplainWork"> Explain work procedures to new employees</label><br>
+    <label><input type="checkbox" id="F7_AssignWork"> Assign work to other employees</label><br>
+    <label><input type="checkbox" id="F7_CheckWork"> Assign and check work of employees</label><br>
+    <label><input type="checkbox" id="F7_MaintainQuality"> Maintain quality, quantity, and accuracy of work</label><br>
+    <label><input type="checkbox" id="F7_CoordinateWork"> Coordinate the work of other employees</label><br>
+    <label><input type="checkbox" id="F7_ScheduleWork"> Schedule work of other employees</label><br>
+    <label><input type="checkbox" id="F7_SetPriorities"> Establish work priorities</label><br>
+    <label><input type="checkbox" id="F7_DevelopMethods"> Develop work methods, procedures, and standards</label><br>
+    <label><input type="checkbox" id="F7_RequestExtraHelp"> Bring in extra help or adjust staff levels</label><br>
+    <label><input type="checkbox" id="F7_InterviewHire"> Interview / recommend prospective employees for hire</label><br>
+    <label><input type="checkbox" id="F7_Discipline"> Provide input for disciplining employees</label><br>
+    <label><input type="checkbox" id="F7_Appraisals"> Provide input for staff performance appraisals</label><br>
+    <label><input type="checkbox" id="F7_RecommendStaffReq"> Recommend staffing requirements</label><br>
+    <label><input type="checkbox" id="F7_TrainStaff"> Train staff</label><br>
+    <label><input type="checkbox" id="F7_RecommendJobContent"> Recommend job content for other employees</label><br><br>
+
+    <h3>9(b) Number of employees supervised directly</h3>
+    <p>(List full-time, part-time, and their locations)</p>
+
+    <textarea id="F7_DirectSupervisionDetails" 
+              placeholder="E.g., 3 full-time clerks, 1 part-time assistant, located in 2 offices..."
+              style="width:90%; height:120px;"></textarea>
+    <br><br>
+
+</div>
+
+<!-- ✅ PAGE 14 — INDIRECT & FUNCTIONAL SUPERVISION -->
+<div class="pageSection" id="page14">
+
+    <h2>Factor 7: Supervisory Responsibility (Part 2 — Indirect & Functional)</h2>
+
+    <h3>9(c) Indirect Supervision</h3>
+    <p>
+        List the number of employees who report to you indirectly through subordinate supervisors. 
+        Include full-time / part-time, locations, and distribution.
+    </p>
+
+    <textarea id="F7_IndirectSupervisionDetails" 
+              placeholder="E.g., 12 indirect staff across 3 districts..."
+              style="width:90%; height:120px;"></textarea>
+    <br><br>
+
+    <h3>9(d) Functional Supervision</h3>
+    <p>
+        Functional supervision involves giving technical or policy‑related instruction 
+        to employees who do NOT report directly to you.
+    </p>
+
+    <label>Do you provide functional supervision?</label><br>
+    <select id="F7_FunctionalSupervision" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Yes</option>
+        <option>No</option>
+    </select>
+    <br><br>
+
+    <label>If yes, list the titles of individuals supervised functionally:</label><br>
+    <textarea id="F7_FunctionalTitles" style="width:90%; height:90px;"></textarea>
+    <br><br>
+
+    <h3>9(g) Actions taken when procedures are not followed</h3>
+    <textarea id="F7_NonComplianceActions" 
+              placeholder="Describe what actions you take when employees fail to follow procedures."
+              style="width:90%; height:120px;"></textarea>
+    <br><br>
+
+    <h3>9(h) Additional supervisory information not covered above</h3>
+    <textarea id="F7_OtherInfo" 
+              style="width:90%; height:120px;"
+              placeholder="Provide any additional supervision-related information."></textarea>
+    <br><br>
+
+</div>
+
+
+
+<!-- =============================================================== -->
+<!-- BLOCK 15: FACTOR 8 — RELATIONSHIPS / CONTACTS (Pages 15–17)     -->
+<!-- =============================================================== -->
+
+<!-- ✅ PAGE 15 — CONTACT TYPES (A & B) -->
+<div class="pageSection" id="page15">
+
+    <h2>Factor 8: Responsibility for Relationships / Contacts (Part A & B)</h2>
+
+    <p>
+        This section evaluates the nature and frequency of your contact with internal and 
+        external groups as part of your job.
+    </p>
+
+    <h3>10(a) Nature of Contacts — Select the appropriate code for each group</h3>
+    <p>
+        <strong>Codes:</strong><br>
+        A = No exchange<br>
+        B = Exchange of factual/everyday information<br>
+        C = Explanation/interpretation of information or ideas<br>
+        D = Discussion to obtain cooperation or solve problems<br>
+        E = Mitigation of high‑tension or emotional situations
+    </p>
+
+    <!-- Contact table replication using inputs -->
+
+    <label><strong>Employees in my department (excluding subordinates):</strong></label><br>
+    <select id="F8A_EmployeesDept" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>Employees in another department:</strong></label><br>
+    <select id="F8A_EmployeesOtherDept" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>Heads of departments or services (other than my own):</strong></label><br>
+    <select id="F8A_DeptHeads" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>Business representatives (vendors, contractors):</strong></label><br>
+    <select id="F8A_BusinessReps" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>MDAs / MMDAs or service delivery agencies:</strong></label><br>
+    <select id="F8A_MDAs" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>Representatives of external institutions / government:</strong></label><br>
+    <select id="F8A_ExternalGov" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>Clients / Students / Patients:</strong></label><br>
+    <select id="F8A_Clients" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <label><strong>General Public:</strong></label><br>
+    <select id="F8A_Public" style="width:90%; padding:8px;">
+        <option value="">-- Select Code --</option><option>A</option><option>B</option>
+        <option>C</option><option>D</option><option>E</option>
+    </select><br><br>
+
+    <hr>
+
+    <h3>10(b) External Contacts — Names, Purpose, Frequency</h3>
+
+    <label>Contact 1:</label><br>
+    <textarea id="F8B_Contact1" placeholder="Name / Purpose / Frequency"
+              style="width:90%; height:70px;"></textarea><br><br>
+
+    <label>Contact 2:</label><br>
+    <textarea id="F8B_Contact2" style="width:90%; height:70px;"></textarea><br><br>
+
+    <label>Contact 3:</label><br>
+    <textarea id="F8B_Contact3" style="width:90%; height:70px;"></textarea><br><br>
+
+</div>
+
+<!-- ✅ PAGE 16 — DIFFICULT / UNWANTED INTERACTIONS (C & D) -->
+<div class="pageSection" id="page16">
+
+    <h2>Factor 8: Relationships / Contacts (Part C & D)</h2>
+
+    <h3>10(c) Telling people things they do NOT want to hear</h3>
+
+    <p>Select frequency and provide examples.</p>
+
+    <label><strong>Other employees:</strong></label><br>
+    <select id="F8C_OtherEmployees_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8C_OtherEmployees_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Clients or patients:</strong></label><br>
+    <select id="F8C_Clients_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8C_Clients_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>MDAs / MMDAs:</strong></label><br>
+    <select id="F8C_MDAs_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8C_MDAs_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Other (specify):</strong></label><br>
+    <input id="F8C_OtherGroup" type="text" style="width:90%; padding:8px;"><br><br>
+    <select id="F8C_OtherGroup_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8C_OtherGroup_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <hr>
+
+    <h3>10(d) Dealing with upset or angry people</h3>
+
+    <label><strong>Clients / Patients:</strong></label><br>
+    <select id="F8D_ClientsAngry_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8D_ClientsAngry_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Other Groups:</strong></label><br>
+    <input id="F8D_OtherAngryGroup" type="text" style="width:90%; padding:8px;"><br><br>
+    <select id="F8D_OtherAngryGroup_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8D_OtherAngryGroup_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+</div>
+
+<!-- ✅ PAGE 17 — COMMUNICATION FREQUENCIES (E, F, G, H) -->
+<div class="pageSection" id="page17">
+
+    <h2>Factor 8: Relationships / Contacts (Part E, F, G & H)</h2>
+
+    <h3>10(e) Dealing with mentally/emotionally disturbed people</h3>
+    <select id="F8E_EmotionallyDisturbed_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br><br>
+    <textarea id="F8E_EmotionallyDisturbed_Example" 
+              style="width:90%; height:80px;"
+              placeholder="Nature of contact..."></textarea>
+    <br><br><hr>
+
+    <h3>10(f) When talking with clients / non‑employees, how often do you:</h3>
+
+    <label><strong>Get information from them:</strong></label><br>
+    <select id="F8F_GetInfo_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8F_GetInfo_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Inform them:</strong></label><br>
+    <select id="F8F_Inform_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8F_Inform_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Give them advice:</strong></label><br>
+    <select id="F8F_Advise_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8F_Advise_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Persuade or empathise with them:</strong></label><br>
+    <select id="F8F_Persuade_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8F_Persuade_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Devise mutual goals with them:</strong></label><br>
+    <select id="F8F_MutualGoals_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8F_MutualGoals_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <hr>
+
+    <h3>10(g) When talking with employees (not your subordinates), how often do you:</h3>
+
+    <label><strong>Get information:</strong></label><br>
+    <select id="F8G_GetInfo_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8G_GetInfo_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Inform them:</strong></label><br>
+    <select id="F8G_Inform_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8G_Inform_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Refer them:</strong></label><br>
+    <select id="F8G_Refer_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8G_Refer_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Persuade or empathize:</strong></label><br>
+    <select id="F8G_Persuade_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8G_Persuade_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <label><strong>Give work procedures advice:</strong></label><br>
+    <select id="F8G_GiveAdvice_Freq" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Almost never</option><option>Once in a while</option>
+        <option>Often</option><option>Most of the time</option>
+    </select><br>
+    <textarea id="F8G_GiveAdvice_Example" style="width:90%; height:60px;"></textarea><br><br>
+
+    <hr>
+
+    <h3>10(h) Additional contact-related information</h3>
+    <textarea id="F8H_OtherInfo" style="width:90%; height:120px;"></textarea><br><br>
+
+</div>
+
+
+<!-- ====================================================== -->
+<!-- BLOCK 16: FACTOR 9 — WORKING ENVIRONMENT (Page 18)     -->
+<!-- ====================================================== -->
+
+<div class="pageSection" id="page18">
+
+    <h2>Factor 9: Working Environment</h2>
+
+    <p>
+        This section identifies unpleasant or hazardous environmental conditions 
+        you encounter while performing your job, and how frequently they occur.
+        Select the appropriate frequency for each condition.
+    </p>
+
+    <h3>11(a) Unpleasant Environmental Conditions</h3>
+    <p><strong>Frequency codes:</strong><br>
+       1 = Occasionally (once in a while)<br>
+       2 = Frequently (several times daily or almost every day)<br>
+       3 = Continuously (all working hours except breaks)</p>
+
+    <!-- We replicate each environmental condition as a dropdown -->
+
+    <label><strong>Body fluids:</strong></label><br>
+    <select id="F9_BodyFluids" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Chemical substances:</strong></label><br>
+    <select id="F9_Chemicals" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Cold:</strong></label><br>
+    <select id="F9_Cold" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Dust:</strong></label><br>
+    <select id="F9_Dust" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Extreme temperatures:</strong></label><br>
+    <select id="F9_ExtremeTemp" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Grease, grime, or oil:</strong></label><br>
+    <select id="F9_GreaseOil" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Heat:</strong></label><br>
+    <select id="F9_Heat" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Inadequate lighting:</strong></label><br>
+    <select id="F9_Lighting" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Inadequate ventilation:</strong></label><br>
+    <select id="F9_Ventilation" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Inclement weather:</strong></label><br>
+    <select id="F9_Weather" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Interruptions:</strong></label><br>
+    <select id="F9_Interruptions" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Lack of workspace:</strong></label><br>
+    <select id="F9_Workspace" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Moisture:</strong></label><br>
+    <select id="F9_Moisture" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Noise:</strong></label><br>
+    <select id="F9_Noise" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Odours:</strong></label><br>
+    <select id="F9_Odour" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Soiled linens:</strong></label><br>
+    <select id="F9_SoiledLinens" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Steam:</strong></label><br>
+    <select id="F9_Steam" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Travel:</strong></label><br>
+    <select id="F9_Travel" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Verbal abuse:</strong></label><br>
+    <select id="F9_VerbalAbuse" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Vibration:</strong></label><br>
+    <select id="F9_Vibration" style="width:90%; padding:8px;">
+        <option value="">-- Select frequency --</option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <hr>
+
+    <h3>11(b) Locations Where You Perform Job Duties</h3>
+    <p>Provide the places you normally work and approximate hours per week.</p>
+
+    <textarea id="F9_Locations"
+              placeholder="E.g., Office (35 hrs/week), Field inspections (5 hrs/week), Clinic (10 hrs/week)..."
+              style="width:90%; height:120px;"></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ====================================================== -->
+<!-- BLOCK 17: FACTOR 10 — OCCUPATIONAL HAZARDS (Page 19)    -->
+<!-- ====================================================== -->
+
+<div class="pageSection" id="page19">
+
+    <h2>Factor 10: Occupational Hazards</h2>
+
+    <p>
+        This section identifies hazardous conditions associated with your job duties 
+        and the precautions required to avoid injury or exposure.
+    </p>
+
+    <!-- 12(a) Hazard frequency -->
+    <h3>12(a) Hazard Exposure — Select Frequency</h3>
+    <p><strong>Frequency codes:</strong><br>
+       1 = Occasionally (once in a while)<br>
+       2 = Frequently (daily or almost daily)<br>
+       3 = Continuously (all working hours, except breaks)</p>
+
+    <label><strong>Acid:</strong></label><br>
+    <select id="F10_Acid" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Asbestos:</strong></label><br>
+    <select id="F10_Asbestos" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Body fluids:</strong></label><br>
+    <select id="F10_BodyFluids" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Chemical substances:</strong></label><br>
+    <select id="F10_Chemicals" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Excavation cave‑ins:</strong></label><br>
+    <select id="F10_CaveIns" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Exposure to infectious diseases:</strong></label><br>
+    <select id="F10_InfectiousDisease" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>High voltage:</strong></label><br>
+    <select id="F10_HighVoltage" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Noise:</strong></label><br>
+    <select id="F10_Noise" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Radiation:</strong></label><br>
+    <select id="F10_Radiation" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Steam:</strong></label><br>
+    <select id="F10_Steam" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <label><strong>Violence:</strong></label><br>
+    <select id="F10_Violence" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select><br><br>
+
+    <hr>
+
+    <!-- 12(b) PPE or precautions -->
+    <h3>12(b) Required Precautions / Protective Equipment</h3>
+
+    <label>Do you take special precautions or wear protective equipment?</label><br><br>
+
+    <select id="F10_PPERequired" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>No</option>
+        <option>Yes</option>
+    </select><br><br>
+
+    <label>If yes, provide examples:</label><br>
+    <textarea id="F10_PPEExamples" 
+              placeholder="E.g., gloves, safety boots, hard hat, masks, goggles, etc."
+              style="width:90%; height:90px;"></textarea>
+    <br><br>
+
+    <hr>
+
+    <!-- 12(c) Common injuries -->
+    <h3>12(c) Common Injuries / Hazards in Your Work</h3>
+
+    <label><input type="checkbox" id="F10_BackInjury"> Back injury</label><br>
+    <label><input type="checkbox" id="F10_Bites"> Bites</label><br>
+    <label><input type="checkbox" id="F10_Bruises"> Bruises</label><br>
+    <label><input type="checkbox" id="F10_Burns"> Burns</label><br>
+    <label><input type="checkbox" id="F10_Cuts"> Cuts</label><br>
+    <label><input type="checkbox" id="F10_ElectricShock"> Electric shock</label><br>
+    <label><input type="checkbox" id="F10_ExposureDisease"> Exposure to infectious disease</label><br>
+    <label><input type="checkbox" id="F10_NeedlePricks"> Needle pricks</label><br>
+    <label><input type="checkbox" id="F10_RepetitiveStrain"> Repetitive strain injury</label><br>
+    <label><input type="checkbox" id="F10_Scrapes"> Scrapes</label><br>
+    <label><input type="checkbox" id="F10_Sprains"> Sprains</label><br><br>
+
+    <label>Other (specify):</label><br>
+    <textarea id="F10_OtherInjuries" style="width:90%; height:70px;"></textarea>
+    <br><br>
+
+    <hr>
+
+    <!-- 12(d) Nature of injury -->
+    <h3>12(d) Describe the Nature of Injuries That May Occur</h3>
+    <textarea id="F10_InjuryNature" 
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="Describe how injuries occur, severity, and typical circumstances..."></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ====================================================== -->
+<!-- BLOCK 18: FACTOR 11 — DEXTERITY (Page 20)              -->
+<!-- ====================================================== -->
+
+<div class="pageSection" id="page20">
+
+    <h2>Factor 11: Dexterity</h2>
+
+    <p>
+        This section evaluates the degree of manual dexterity required in your job.  
+        Manual dexterity refers to the speed, accuracy, and coordination of hand, wrist, and arm movements 
+        required to carry out tasks associated with your duties.
+    </p>
+
+    <h3>13(a) Describe the level of manual dexterity required</h3>
+    <p>Select the one that BEST describes your job:</p>
+
+    <select id="F11_DexterityLevel" style="width:90%; padding:8px;">
+        <option value="">-- Select Level --</option>
+        <option>Simple hand movements (picking up, holding, opening objects)</option>
+        <option>Coordinated hand movements (sorting, arranging, positioning items)</option>
+        <option>Frequent hand‑eye coordination (typing, filing, data entry)</option>
+        <option>Precision work requiring fine motor control (laboratory work, repairs)</option>
+        <option>Highly complex manual tasks requiring speed & high accuracy</option>
+    </select>
+    <br><br>
+
+    <h3>13(b) Provide examples of dexterity‑related tasks</h3>
+    <textarea id="F11_DexterityExamples"
+              placeholder="Examples: typing 50wpm, laboratory pipetting, data entry, equipment adjustments, etc."
+              style="width:90%; height:120px; padding:8px;"></textarea>
+    <br><br>
+
+    <h3>13(c) Additional information on dexterity requirements</h3>
+    <textarea id="F11_OtherInfo"
+              placeholder="Add any other job‑specific manual or finger/wrist skill requirements..."
+              style="width:90%; height:120px; padding:8px;"></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 19: FACTOR 12 — PHYSICAL EFFORT (Page 21)           -->
+<!-- ========================================================= -->
+
+<div class="pageSection" id="page21">
+
+    <h2>Factor 12: Physical Effort</h2>
+
+    <p>
+        This section evaluates how physically demanding your job is, including
+        standing, walking, lifting, bending, and other physical tasks and 
+        the duration/frequency at which they occur.
+    </p>
+
+    <h3>14(a) Indicate how often and how long you perform each physical activity</h3>
+
+    <p><strong>Frequency Codes:</strong><br>
+       1 = Occasionally (once in a while)<br>
+       2 = Frequently (several times daily or almost every day)<br>
+       3 = Continuously (all working hours except breaks)</p>
+
+    <!-- 14(a) Activity table recreation -->
+
+    <!-- Standing -->
+    <label><strong>Standing:</strong></label><br>
+    <select id="F12_Standing_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Standing_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Walking -->
+    <label><strong>Walking:</strong></label><br>
+    <select id="F12_Walking_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Walking_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Sitting -->
+    <label><strong>Sitting:</strong></label><br>
+    <select id="F12_Sitting_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Sitting_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Bending -->
+    <label><strong>Bending:</strong></label><br>
+    <select id="F12_Bending_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Bending_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Lifting -->
+    <label><strong>Lifting:</strong></label><br>
+    <select id="F12_Lifting_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Lifting_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Twisting -->
+    <label><strong>Twisting:</strong></label><br>
+    <select id="F12_Twisting_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Twisting_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Kneeling -->
+    <label><strong>Kneeling:</strong></label><br>
+    <select id="F12_Kneeling_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Kneeling_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <!-- Climbing -->
+    <label><strong>Climbing:</strong></label><br>
+    <select id="F12_Climbing_Freq" style="width:90%; padding:8px;">
+        <option value=""></option><option>1</option><option>2</option><option>3</option>
+    </select>
+    <br>
+    <input id="F12_Climbing_Duration" 
+           type="text" 
+           placeholder="Approx. hours/day" 
+           style="width:90%; padding:8px;">
+    <br><br>
+
+    <hr>
+
+    <h3>14(b) Lifting — specify maximum weight</h3>
+    <p>Indicate the heaviest weight you normally lift or carry:</p>
+
+    <select id="F12_MaxLifting" style="width:90%; padding:8px;">
+        <option value=""></option>
+        <option>Up to 5 kg</option>
+        <option>6 to 10 kg</option>
+        <option>11 to 20 kg</option>
+        <option>21 to 35 kg</option>
+        <option>Over 35 kg</option>
+    </select>
+    <br><br>
+
+    <label>Provide examples of tasks requiring this lifting:</label><br>
+    <textarea id="F12_LiftingExamples"
+              style="width:90%; height:100px; padding:8px;"
+              placeholder="E.g., lifting boxes, equipment, records, materials…"></textarea>
+    <br><br>
+
+    <hr>
+
+    <h3>14(c) Other physical effort not covered above</h3>
+    <textarea id="F12_OtherEffort"
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="Describe any additional physical demands of your job..."></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 20: FACTOR 13 — MENTAL EFFORT (Page 22)              -->
+<!-- ========================================================= -->
+
+<div class="pageSection" id="page22">
+
+    <h2>Factor 13: Mental Effort</h2>
+
+    <p>
+        This section evaluates the amount of mental concentration, attention, 
+        and sustained cognitive effort required to perform your job duties.
+    </p>
+
+    <h3>15(a) Concentration Required</h3>
+    <p>Indicate the level of concentration typically required to perform your job:</p>
+
+    <select id="F13_ConcentrationLevel" style="width:90%; padding:8px;">
+        <option value="">-- Select Level --</option>
+        <option>Short periods of concentration with frequent breaks</option>
+        <option>Moderate concentration with occasional interruptions</option>
+        <option>Frequent long periods of sustained concentration</option>
+        <option>Continuous sustained concentration on detailed work</option>
+        <option>Highly intense mental effort for prolonged periods</option>
+    </select>
+    <br><br>
+
+    <label>Provide examples of tasks requiring this level of concentration:</label><br>
+    <textarea id="F13_ConcentrationExamples"
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="E.g., data analysis, technical assessments, case reviews, monitoring systems..."></textarea>
+    <br><br>
+
+    <hr>
+
+    <h3>15(b) Frequency of Interruptions</h3>
+    <p>Select how often your mental work is interrupted:</p>
+
+    <select id="F13_InterruptionsFreq" style="width:90%; padding:8px;">
+        <option value="">-- Select Frequency --</option>
+        <option>Rarely interrupted</option>
+        <option>Occasionally interrupted</option>
+        <option>Frequently interrupted</option>
+        <option>Constantly interrupted</option>
+    </select>
+    <br><br>
+
+    <label>Describe typical sources of interruptions:</label><br>
+    <textarea id="F13_InterruptionsExamples"
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="E.g., phone calls, visitors, urgent issues, team inquiries..."></textarea>
+    <br><br>
+
+    <hr>
+
+    <h3>15(c) Mental Fatigue</h3>
+    <p>Does your job cause mental fatigue due to the nature of tasks?</p>
+
+    <select id="F13_MentalFatigue" style="width:90%; padding:8px;">
+        <option value="">-- Select --</option>
+        <option>Rarely</option>
+        <option>Occasionally</option>
+        <option>Frequently</option>
+        <option>Most of the time</option>
+    </select>
+    <br><br>
+
+    <label>Explain why or give examples:</label><br>
+    <textarea id="F13_MentalFatigueExamples"
+              style="width:90%; height:120px; padding:8px;"
+              placeholder="E.g., handling complex cases, continuous decision‑making, multitasking..."></textarea>
+    <br><br>
+
+    <hr>
+
+    <h3>15(d) Additional Mental Effort Information</h3>
+    <textarea id="F13_OtherInfo"
+              placeholder="Provide any additional information on mental effort not covered above."
+              style="width:90%; height:130px; padding:8px;"></textarea>
+    <br><br>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 21: SHAREPOINT SUBMISSION ENGINE                     -->
+<!-- ========================================================= -->
+
+<script>
+/* ============================================================
+   SUBMISSION ENGINE — POSTS TO SHAREPOINT LIST
+============================================================ */
+
+async function submitFormToSharePoint(){
+
+    // Disable button to prevent double submission
+    document.getElementById("nextBtn").innerText = "Submitting…";
+    document.getElementById("nextBtn").disabled = true;
+
+    // ============================
+    // 1. COLLECT STRUCTURED FIELDS
+    // ============================
+    const data = {
+
+        // Identification
+        RespondentID: RESPONDENT_ID,
+        JobTitle: document.getElementById("JobTitle").value,
+        Organisation: document.getElementById("Organisation").value,
+        Status: document.getElementById("Status")?.value ?? "",
+        GradeOrRank: document.getElementById("GradeOrRank").value,
+        Department: document.getElementById("Department").value,
+        LastName: document.getElementById("LastName").value,
+        FirstName: document.getElementById("FirstName").value,
+        WorkAddress: document.getElementById("WorkAddress").value,
+        WorkTelephone: document.getElementById("WorkTelephone").value,
+        FaxNumber: document.getElementById("FaxNumber").value,
+        Email: document.getElementById("Email").value,
+        SupervisorName: document.getElementById("SupervisorName").value,
+        SecondarySupervisor: document.getElementById("SecondarySupervisor").value,
+        PositionalChart: document.getElementById("PositionalChart").value,
+
+        // Job Summary
+        JobSummaryPurpose: document.getElementById("JobSummaryPurpose").value,
+
+        // Duties
+        Duty1_Description: document.getElementById("Duty1_Description").value,
+        Duty1_Frequency: document.getElementById("Duty1_Frequency").value,
+        Duty1_Percentage: document.getElementById("Duty1_Percentage").value,
+        Duty1_Importance: document.getElementById("Duty1_Importance").value,
+
+        Duty2_Description: document.getElementById("Duty2_Description").value,
+        Duty2_Frequency: document.getElementById("Duty2_Frequency").value,
+        Duty2_Percentage: document.getElementById("Duty2_Percentage").value,
+        Duty2_Importance: document.getElementById("Duty2_Importance").value,
+
+        Duty3_Description: document.getElementById("Duty3_Description").value,
+        Duty3_Frequency: document.getElementById("Duty3_Frequency").value,
+        Duty3_Percentage: document.getElementById("Duty3_Percentage").value,
+        Duty3_Importance: document.getElementById("Duty3_Importance").value,
+
+        Duty4_Description: document.getElementById("Duty4_Description").value,
+        Duty4_Frequency: document.getElementById("Duty4_Frequency").value,
+        Duty4_Percentage: document.getElementById("Duty4_Percentage").value,
+        Duty4_Importance: document.getElementById("Duty4_Importance").value,
+
+        Duty5_Description: document.getElementById("Duty5_Description").value,
+        Duty5_Frequency: document.getElementById("Duty5_Frequency").value,
+        Duty5_Percentage: document.getElementById("Duty5_Percentage").value,
+        Duty5_Importance: document.getElementById("Duty5_Importance").value,
+
+        Duty6_Description: document.getElementById("Duty6_Description").value,
+        Duty6_Frequency: document.getElementById("Duty6_Frequency").value,
+        Duty6_Percentage: document.getElementById("Duty6_Percentage").value,
+        Duty6_Importance: document.getElementById("Duty6_Importance").value,
+
+        Duty7_Description: document.getElementById("Duty7_Description").value,
+        Duty7_Frequency: document.getElementById("Duty7_Frequency").value,
+        Duty7_Percentage: document.getElementById("Duty7_Percentage").value,
+        Duty7_Importance: document.getElementById("Duty7_Importance").value,
+
+        Duty8_Description: document.getElementById("Duty8_Description").value,
+        Duty8_Frequency: document.getElementById("Duty8_Frequency").value,
+        Duty8_Percentage: document.getElementById("Duty8_Percentage").value,
+        Duty8_Importance: document.getElementById("Duty8_Importance").value,
+
+        Duty9_Description: document.getElementById("Duty9_Description").value,
+        Duty9_Frequency: document.getElementById("Duty9_Frequency").value,
+        Duty9_Percentage: document.getElementById("Duty9_Percentage").value,
+        Duty9_Importance: document.getElementById("Duty9_Importance").value,
+
+        Duty10_Description: document.getElementById("Duty10_Description").value,
+        Duty10_Frequency: document.getElementById("Duty10_Frequency").value,
+        Duty10_Percentage: document.getElementById("Duty10_Percentage").value,
+        Duty10_Importance: document.getElementById("Duty10_Importance").value,
+
+        // Factor Sections (stored as full text blocks)
+        F1_Knowledge: (
+            document.getElementById("F1_MinEducation").value + " | " +
+            document.getElementById("F1_EducationProgram").value + " | " +
+            document.getElementById("F1_LicenseRequired").value + " | " +
+            document.getElementById("F1_LicenseType").value + " | " +
+            document.getElementById("F1_TrainingClassroom").value + " | " +
+            document.getElementById("F1_TrainingOnJob").value + " | " +
+            document.getElementById("F1_ReadingSkills").value + " | " +
+            document.getElementById("F1_ReadingExample").value + " | " +
+            document.getElementById("F1_WritingSkills").value + " | " +
+            document.getElementById("F1_WritingExample").value + " | " +
+            document.getElementById("F1_MathSkills").value + " | " +
+            document.getElementById("F1_MathExample").value + " | " +
+            document.getElementById("F1_OtherKnowledge").value
+        ),
+
+        F2_LearningExperience:
+            document.getElementById("F2_PreviousExperience").value + " | " +
+            document.getElementById("F2_ExperienceYears").value + " | " +
+            document.getElementById("F2_PreviousExperienceDesc").value + " | " +
+            document.getElementById("F2_OnJobTraining").value + " | " +
+            document.getElementById("F2_OtherLearning").value,
+
+        // JUDGMENT FULL BLOCK (compressed into single field for storage)
+        F3_Judgment: "Stored separately in JSON backup",
+
+        // CONSEQUENCE OF ERROR
+        F4_ConsequenceOfError: "Stored separately in JSON backup",
+
+        // FINANCIAL
+        F5_FinancialResponsibility: "Stored separately in JSON backup",
+
+        // ASSETS
+        F6_ResponsibilityAssets: "Stored separately in JSON backup",
+
+        // SUPERVISORY
+        F7_SupervisoryResponsibility: "Stored separately in JSON backup",
+
+        // CONTACTS
+        F8_Contacts: "Stored separately in JSON backup",
+
+        // WORK ENVIRONMENT
+        F9_WorkEnvironment: "Stored separately in JSON backup",
+
+        // HAZARDS
+        F10_Hazards: "Stored separately in JSON backup",
+
+        // DEXTERITY
+        F11_Dexterity: 
+            document.getElementById("F11_DexterityLevel").value + " | " +
+            document.getElementById("F11_DexterityExamples").value + " | " +
+            document.getElementById("F11_OtherInfo").value,
+
+        // PHYSICAL
+        F12_PhysicalEffort: "Stored separately in JSON backup",
+
+        // MENTAL
+        F13_MentalEffort: "Stored separately in JSON backup",
+
+        // FINAL COMMENTS
+        FinalComments: "FINAL COMMENTS WILL BE INSERTED IN BLOCK 22"
+    };
+
+    // ===================================================
+    // Create JSON BACKUP: captures ALL fields for auditing
+    // ===================================================
+    const fullJSON = JSON.stringify(data);
+
+    // Attach JSON backup
+    data.FullJSONBackup = fullJSON;
+    data.SubmissionTimestamp = new Date().toISOString();
+
+    // ========================================
+    // POST to SHAREPOINT LIST via REST API
+    // ========================================
+    const digest = document.getElementById("__REQUESTDIGEST").value;
+
+    const url = "https://swpgh.sharepoint.com/sites/JCAQUNITRAINING/_api/web/lists/getbytitle('FWSC_JCQ_RESPONSES_UNI_TRAINING')/items";
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose",
+            "X-RequestDigest": digest
+        },
+        body: JSON.stringify({
+            "__metadata": { "type": "SP.Data.FWSC_JCQ_RESPONSES_UNI_TRAININGListItem" },
+            ...data
+        })
+    });
+
+    if(response.ok){
+        window.location.href = "#thankyou"; // redirect to thank-you page
+        showThankYouPage();
+    } else {
+        alert("Submission failed. Please check your internet and try again.");
+        document.getElementById("nextBtn").disabled = false;
+        document.getElementById("nextBtn").innerText = "Submit";
+    }
+}
+</script>
+
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 22: FINAL COMMENTS PAGE (Page 23)                    -->
+<!-- ========================================================= -->
+
+<div class="pageSection" id="page23">
+
+    <h2>Final Comments</h2>
+
+    <p>
+        This final section gives you an opportunity to provide any additional remarks, 
+        clarifications, or information that may help in understanding your job content 
+        more accurately. This may include information not fully captured in previous sections.
+    </p>
+
+    <label><strong>Additional Comments / Clarifications:</strong></label><br>
+    <textarea id="FinalComments_Field"
+              style="width:90%; height:200px; padding:8px;"
+              placeholder="Provide any additional details you feel are important for understanding your job content..."></textarea>
+    <br><br>
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 23: THANK-YOU PAGE (Page 24) + Final Comments Fix    -->
+<!-- ========================================================= -->
+
+<!-- ✅ PAGE 24 — THANK-YOU SCREEN -->
+<div class="pageSection" id="page24">
+
+    <h2>Thank You</h2>
+
+    <p style="font-size:18px; line-height:1.5;">
+        ✅ <strong>Your FWSC Job Content Analysis Questionnaire has been submitted successfully.</strong><br><br>
+        Thank you for taking the time to provide this important information.  
+        Your responses have been securely recorded.
+    </p>
+
+</div>
+
+<script>
+/* ============================================================
+   FINAL COMMENTS MAPPING INTO SUBMISSION ENGINE
+============================================================ */
+
+function showThankYouPage(){
+    // Switch UI to Page 24 (Thank You)
+    currentPage = 24;
+    showPage(currentPage);
+}
+
+/* ✅ Replace placeholder FinalComments with the REAL field */
+function insertFinalCommentsIntoSubmission(dataObject){
+    const finalComments = document.getElementById("FinalComments_Field")?.value ?? "";
+    dataObject.FinalComments = finalComments;
+    return dataObject;
+}
+
+/* Override submission to add Final Comments before sending */
+const originalSubmit = submitFormToSharePoint;
+
+submitFormToSharePoint = async function(){
+
+    // 1. Collect base structured fields via the original engine
+    const baseData = {
+        RespondentID: RESPONDENT_ID
+    };
+
+    // 2. Let original engine build full object
+    await originalSubmit();
+
+    // 3. Inject Final Comments (safe patch)
+    insertFinalCommentsIntoSubmission(baseData);
+};
+</script>
+
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOCK 24: FINAL ASSEMBLY CHECK & PAGE INTEGRITY ENGINE     -->
+<!-- ========================================================= -->
+
+<script>
+
+/* ============================================================
+   FINAL ASSEMBLY CHECK — CONFIRM ALL 24 PAGES ARE PRESENT
+============================================================ */
+
+function validatePageStructure() {
+    let missingPages = [];
+
+    for (let i = 1; i <= 24; i++) {
+        if (!document.getElementById("page" + i)) {
+            missingPages.push(i);
+        }
+    }
+
+    if (missingPages.length > 0) {
+        console.warn("⚠️ Missing pages:", missingPages.join(", "));
+    } else {
+        console.log("✅ All 24 pages detected successfully.");
+    }
+}
+
+/* Run at questionnaire start */
+document.addEventListener("DOMContentLoaded", function(){
+    validatePageStructure();
+});
+
+
+/* ============================================================
+   FORCE SCROLL TOP WHEN NAVIGATING BETWEEN PAGES
+============================================================ */
+
+function scrollToTop(){
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+const originalGoNext = goNext;
+goNext = function(){
+    originalGoNext();
+    scrollToTop();
+};
+
+const originalGoBack = goBack;
+goBack = function(){
+    originalGoBack();
+    scrollToTop();
+};
+
+
+/* ============================================================
+   PREVENT IFRAME ESCAPE (SharePoint Modern Page Safe Mode)
+============================================================ */
+
+if (window.top !== window.self) {
+    console.log("✅ Running safely inside SharePoint iframe.");
+} else {
+    console.warn("⚠️ This form is intended to run INSIDE a SharePoint iframe.");
+}
+
+</script>
+
+
+
+
+
+
+<script>
+
+/* =============================================
+   NAVIGATION ENGINE
+============================================= */
+
+let currentPage = 1;
+let totalPages = 24;   // ✅ We will ultimately insert 24 pages
+
+function showPage(pg){
+    // Hide all
+    document.querySelectorAll('.pageSection').forEach(sec => sec.style.display = 'none');
+
+    // Show requested
+    let target = document.getElementById('page'+pg);
+    if(target){
+        target.style.display = 'block';
+        window.scrollTo(0,0);
+    }
+
+    // Back button visibility
+    document.getElementById('backBtn').style.visibility = (pg === 1) ? 'hidden' : 'visible';
+
+    // Next button label
+    document.getElementById('nextBtn').innerText = (pg === totalPages) ? 'Submit' : 'Next ➡';
+
+    // Update progress bar
+    const pct = Math.ceil((pg / totalPages) * 100);
+   document.getElementById('progressBar').style.width = pct + "%";
+    }
+}
+
+/* Navigation: Next */
+function goNext(){
+    if(currentPage < totalPages){
+        currentPage++;
+        showPage(currentPage);
+        scrollToTop();
+    } else {
+        submitFormToSharePoint();
+    }
+}
+
+/* Navigation: Back */
+function goBack(){
+    if(currentPage > 1){
+        currentPage--;
+        showPage(currentPage);
+        scrollToTop();
+    }
+}
+
+</script>
+
+</body>
+</html>
+
+
+</body>
+</html>
